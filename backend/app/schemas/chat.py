@@ -15,3 +15,9 @@ class ChatRequest(BaseModel):
     jd_text: str = Field(default="", description="Target job description text")
     analysis_results: Optional[Dict[str, Any]] = Field(default=None, description="Previous analysis result context")
     api_key: Optional[str] = Field(default=None, description="Optional Gemini API key")
+
+
+class ChatResponse(BaseModel):
+    response: str = Field(..., description="AI Copilot response content")
+    source: str = Field(default="offline_nlp_engine", description="Response engine source: 'gemini' or 'offline_nlp_engine'")
+    model: Optional[str] = Field(default=None, description="Model identifier if generated via external LLM")

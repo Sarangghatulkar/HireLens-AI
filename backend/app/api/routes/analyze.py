@@ -1,7 +1,11 @@
-"""Resume and Job Description analysis endpoint."""
-
-from fastapi import APIRouter, HTTPException
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from app.core.auth import get_optional_current_user
 from app.core.security import resolve_api_key, sanitize_text
+from app.db.session import get_db
+from app.models.scan import ResumeScan
+from app.models.user import User
 from app.schemas.analyze import AnalyzeRequest
 from app.services.ats_checker import audit_ats_compliance
 from app.services.parser import extract_contact_info
@@ -16,7 +20,11 @@ router = APIRouter(tags=["Analysis"])
 
 
 @router.post("/analyze")
-def analyze_resume(req: AnalyzeRequest):
+def analyze_resume(
+    req: AnalyzeRequest,
+    current_user: Optional[User] = Depends(get_optional_current_user),
+    db: Session = Depends(get_db),
+):
     """Executes multi-layered resume matching, skills extraction, ATS audit, and recommendations."""
     resume_text = sanitize_text(req.resume_text)
     jd_text = sanitize_text(req.jd_text)
@@ -74,7 +82,7 @@ def analyze_resume(req: AnalyzeRequest):
             api_key=api_key,
         )
 
-    return {
+    result_payload = {
         "candidate_name": candidate_name,
         "contact_info": contact_info,
         "job_title": req.job_title or "Target Role",
@@ -88,3 +96,34 @@ def analyze_resume(req: AnalyzeRequest):
         "rule_recs": rule_recs,
         "gemini_recs": gemini_recs,
     }
+
+    # Persist evaluation to database if user is authenticated or session is active
+    saved_scan_id = None
+    try:
+        scan_record = ResumeScan(
+            user_id=current_user.id if current_user else None,
+            candidate_name=candidate_name,
+            job_title=req.job_title or "Target Role",
+            overall_score=score_data.get("overall_score", 0.0),
+            tier_label=score_data.get("tier_label", "Evaluation"),
+            skill_score=score_data.get("sub_scores", {}).get("skill_score", 0.0),
+            semantic_score=score_data.get("sub_scores", {}).get("semantic_score", 0.0),
+            keyword_score=score_data.get("sub_scores", {}).get("keyword_score", 0.0),
+            ats_score=ats_audit.get("ats_score", 0.0),
+            matched_skills=skill_comp.get("matched_skills", []),
+            missing_skills=skill_comp.get("missing_skills", []),
+            bonus_skills=skill_comp.get("bonus_skills", []),
+            resume_snippet=resume_text[:400],
+            jd_snippet=jd_text[:400],
+            full_results_json=result_payload,
+        )
+        db.add(scan_record)
+        db.commit()
+        db.refresh(scan_record)
+        saved_scan_id = scan_record.id
+    except Exception:
+        # Never break core analysis if database write encounters any issue
+        db.rollback()
+
+    result_payload["scan_id"] = saved_scan_id
+    return result_payload

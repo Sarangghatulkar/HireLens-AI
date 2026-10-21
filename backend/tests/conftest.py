@@ -11,6 +11,13 @@ from reportlab.lib.styles import getSampleStyleSheet
 # Add backend directory to sys.path so app can be imported
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from app.db.session import init_db
+# Initialize database tables for tests
+try:
+    init_db()
+except Exception:
+    pass
+
 
 @pytest.fixture
 def sample_resume_text() -> str:

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Header from './components/Header';
 import Hero from './components/Hero';
 import Workspace from './components/Workspace';
@@ -10,9 +10,13 @@ import AtsAudit from './components/AtsAudit';
 import AiChatCopilot from './components/AiChatCopilot';
 import Inspector from './components/Inspector';
 import FloatingChatbot from './components/FloatingChatbot';
+import AuthModal from './components/AuthModal';
+import HistoryModal from './components/HistoryModal';
 import {
   analyzeResume,
+  clearAuthToken,
   downloadReport,
+  getUserProfile,
   sendChatMessage,
   uploadResume,
 } from './services/api';
@@ -35,6 +39,49 @@ export default function App() {
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [results, setResults] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
+
+  // User Authentication & History States
+  const [currentUser, setCurrentUser] = useState(null);
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [saveNotification, setSaveNotification] = useState('');
+
+  // Auto-authenticate on mount if token is stored in localStorage
+  useEffect(() => {
+    async function initUser() {
+      try {
+        const profile = await getUserProfile();
+        if (profile) {
+          setCurrentUser(profile);
+        }
+      } catch {
+        // Guest mode fallback
+      }
+    }
+    initUser();
+  }, []);
+
+  // Optional Custom Gemini API Key State
+  const [userApiKey, setUserApiKey] = useState(() => {
+    try {
+      return localStorage.getItem('hirelens_gemini_api_key') || '';
+    } catch {
+      return '';
+    }
+  });
+
+  const handleApiKeyChange = (newKey) => {
+    setUserApiKey(newKey);
+    try {
+      if (newKey) {
+        localStorage.setItem('hirelens_gemini_api_key', newKey);
+      } else {
+        localStorage.removeItem('hirelens_gemini_api_key');
+      }
+    } catch {
+      // Ignore localStorage restrictions
+    }
+  };
 
   // Chatbot State
   const [isChatbotOpen, setIsChatbotOpen] = useState(false);
@@ -71,10 +118,16 @@ export default function App() {
         resumeText,
         jdText,
         jobTitle,
+        apiKey: userApiKey,
       });
 
       setResults(data);
       setActiveTab('overview');
+
+      if (currentUser) {
+        setSaveNotification('✨ Evaluation saved to your profile scan history!');
+        setTimeout(() => setSaveNotification(''), 4500);
+      }
 
       // Update chat initial message with tailored findings
       const overall = data.score_data?.overall_score || 0;
@@ -98,6 +151,37 @@ export default function App() {
     }
   };
 
+  // Handle Logout
+  const handleLogout = () => {
+    clearAuthToken();
+    setCurrentUser(null);
+    setSaveNotification('You have been signed out.');
+    setTimeout(() => setSaveNotification(''), 3000);
+  };
+
+  // Handle Loading Historical Scan into Workspace
+  const handleLoadScanIntoWorkspace = (savedResults, targetJobTitle) => {
+    setResults(savedResults);
+    if (targetJobTitle) setJobTitle(targetJobTitle);
+    setActiveTab('overview');
+    setSaveNotification(`🚀 Restored evaluation for "${targetJobTitle || 'Target Role'}" into workspace.`);
+    setTimeout(() => setSaveNotification(''), 4000);
+
+    const overall = savedResults.score_data?.overall_score || 0;
+    const topMiss = (savedResults.skill_comparison?.missing_skills || []).slice(0, 4).join(', ') || 'none';
+    setChatMessages([
+      {
+        role: 'assistant',
+        content: `🎯 **Restored Historical Scan: ${savedResults.candidate_name || 'Candidate'}** (${targetJobTitle || 'Target Role'})\n\n- **Overall Score:** ${overall}% (${savedResults.score_data?.tier_label || 'Evaluation'})\n- **Missing Skills:** ${topMiss}\n- **ATS Score:** ${savedResults.ats_audit?.ats_score || 'N/A'}%\n\nYou can now examine strengths/weaknesses, export the PDF report, or ask me for specific bullet point rewrites!`,
+      },
+    ]);
+
+    setTimeout(() => {
+      const el = document.getElementById('results-section');
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
+    }, 150);
+  };
+
   // Handle Chat Message
   const handleSendMessage = async (userText) => {
     const updatedMessages = [...chatMessages, { role: 'user', content: userText }];
@@ -110,10 +194,19 @@ export default function App() {
         resumeText,
         jdText,
         analysisResults: results,
+        apiKey: userApiKey,
       });
 
       if (data.response) {
-        setChatMessages([...updatedMessages, { role: 'assistant', content: data.response }]);
+        setChatMessages([
+          ...updatedMessages,
+          {
+            role: 'assistant',
+            content: data.response,
+            source: data.source || 'offline_nlp_engine',
+            model: data.model,
+          },
+        ]);
       } else {
         setChatMessages([
           ...updatedMessages,
@@ -170,11 +263,20 @@ export default function App() {
     <div className="app-container">
       {/* Top Navbar */}
       <Header
-        enablePii={enablePii}
-        onTogglePii={() => setEnablePii(!enablePii)}
         isChatbotOpen={isChatbotOpen}
         onToggleChatbot={() => setIsChatbotOpen(!isChatbotOpen)}
+        currentUser={currentUser}
+        onOpenAuth={() => setIsAuthOpen(true)}
+        onLogout={handleLogout}
+        onOpenHistory={() => setIsHistoryOpen(true)}
       />
+
+      {/* Floating Save/Status Notification Toast */}
+      {saveNotification && (
+        <div className="save-toast-banner" role="status">
+          <span>{saveNotification}</span>
+        </div>
+      )}
 
       <main className="main-content">
         {/* Hero Section */}
@@ -273,6 +375,8 @@ export default function App() {
                 onSendMessage={handleSendMessage}
                 loading={chatLoading}
                 results={results}
+                apiKey={userApiKey}
+                onApiKeyChange={handleApiKeyChange}
               />
             )}
             {activeTab === 'inspector' && (
@@ -293,6 +397,28 @@ export default function App() {
         resumeText={resumeText}
         jdText={jdText}
         onResetChat={handleResetChat}
+        apiKey={userApiKey}
+        onApiKeyChange={handleApiKeyChange}
+      />
+
+      {/* User Authentication Modal (Login & Registration) */}
+      <AuthModal
+        isOpen={isAuthOpen}
+        onClose={() => setIsAuthOpen(false)}
+        onAuthSuccess={(user) => {
+          setCurrentUser(user);
+          setSaveNotification(`👋 Welcome, ${user.full_name || user.email}!`);
+          setTimeout(() => setSaveNotification(''), 4000);
+        }}
+      />
+
+      {/* Scan History & Score Progression Analytics Modal */}
+      <HistoryModal
+        isOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        currentUser={currentUser}
+        onOpenAuth={() => setIsAuthOpen(true)}
+        onLoadScanIntoWorkspace={handleLoadScanIntoWorkspace}
       />
     </div>
   );

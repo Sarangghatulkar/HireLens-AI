@@ -27,18 +27,56 @@ export default function Workspace({
     }
   };
 
+  const handleClearAll = () => {
+    setResumeText('');
+    setJdText('');
+    setJobTitle('');
+  };
+
   return (
     <div className="workspace-card" id="workspace-section">
+      {/* Workspace Quick Actions Bar */}
+      <div className="workspace-toolbar">
+        <div className="workspace-toolbar-left">
+          <span className="workspace-pill-tag">✨ Evaluation Workspace</span>
+          <span className="workspace-sub-note">Paste inputs or upload PDF for instant ATS match</span>
+        </div>
+        <div className="workspace-toolbar-right">
+          {(resumeText.trim() || jdText.trim() || jobTitle.trim()) && (
+            <button
+              type="button"
+              className="workspace-clear-btn"
+              onClick={handleClearAll}
+              title="Clear all fields"
+            >
+              Clear Workspace
+            </button>
+          )}
+        </div>
+      </div>
+
       <div className="workspace-grid">
         {/* Left Column: Candidate Resume */}
-        <div>
+        <div className="workspace-col">
           <div className="input-block-header">
             <span className="input-title">
-              <span>📄</span> 1. Candidate Resume
+              <span className="input-step-badge">1</span>
+              <span>Candidate Resume</span>
             </span>
-            <span className="input-counter">
-              {resumeWords} words {sourceName ? `• ${sourceName}` : ''}
-            </span>
+            <div className="input-actions-right">
+              {resumeText.trim() && (
+                <button
+                  type="button"
+                  className="input-clear-link"
+                  onClick={() => setResumeText('')}
+                >
+                  Clear
+                </button>
+              )}
+              <span className={`input-counter ${resumeWords > 0 ? 'active' : ''}`}>
+                {resumeWords} words {sourceName ? `• ${sourceName}` : ''}
+              </span>
+            </div>
           </div>
 
           {/* Hidden File Input */}
@@ -54,7 +92,7 @@ export default function Workspace({
             }}
           />
 
-          {/* Dropzone */}
+          {/* Drag & Drop Zone */}
           <div
             className={`dropzone ${isDragOver ? 'dragover' : ''}`}
             onClick={() => fileInputRef.current && fileInputRef.current.click()}
@@ -64,69 +102,107 @@ export default function Workspace({
             }}
             onDragLeave={() => setIsDragOver(false)}
             onDrop={handleDrop}
+            role="button"
+            tabIndex={0}
+            aria-label="Upload resume file"
           >
-            <div style={{ fontSize: '1.8rem', marginBottom: 4 }}>📥</div>
+            <div className="dropzone-icon">📄</div>
             <div className="dropzone-text">
-              {uploading
-                ? 'Extracting text from resume...'
-                : 'Click to upload or drag & drop PDF / TXT resume'}
+              {uploading ? (
+                <span className="dropzone-loading">
+                  <span className="spinner-sm" /> Extracting resume text in-memory...
+                </span>
+              ) : (
+                'Drop PDF or TXT resume here, or click to browse'
+              )}
             </div>
-            <div className="dropzone-sub">In-memory processing • Never permanently stored</div>
+            <div className="dropzone-sub">
+              Secure in-memory OCR & parsing • Zero third-party telemetry
+            </div>
           </div>
 
           <textarea
             className="text-area"
             value={resumeText}
             onChange={(e) => setResumeText(e.target.value)}
-            placeholder="Parsed resume text appears here, or you can paste your resume directly..."
+            placeholder="Parsed resume text appears here automatically, or you can paste your raw resume text directly..."
+            rows={12}
+            id="workspace-resume-input"
           />
         </div>
 
         {/* Right Column: Target Job Description */}
-        <div>
+        <div className="workspace-col">
           <div className="input-block-header">
             <span className="input-title">
-              <span>💼</span> 2. Target Job Description
+              <span className="input-step-badge">2</span>
+              <span>Target Job Description</span>
             </span>
-            <span className="input-counter">{jdWords} words</span>
+            <div className="input-actions-right">
+              {jdText.trim() && (
+                <button
+                  type="button"
+                  className="input-clear-link"
+                  onClick={() => setJdText('')}
+                >
+                  Clear
+                </button>
+              )}
+              <span className={`input-counter ${jdWords > 0 ? 'active' : ''}`}>
+                {jdWords} words
+              </span>
+            </div>
           </div>
 
-          <input
-            type="text"
-            className="text-input"
-            value={jobTitle}
-            onChange={(e) => setJobTitle(e.target.value)}
-            placeholder="Job Title / Role (e.g. Senior Machine Learning Engineer)"
-          />
+          <div className="job-title-input-wrapper">
+            <span className="job-title-icon">💼</span>
+            <input
+              type="text"
+              className="text-input"
+              value={jobTitle}
+              onChange={(e) => setJobTitle(e.target.value)}
+              placeholder="Target Role / Job Title (e.g. Senior Machine Learning Engineer)"
+              id="workspace-job-title-input"
+            />
+          </div>
 
           <textarea
             className="text-area"
             value={jdText}
             onChange={(e) => setJdText(e.target.value)}
-            placeholder="Paste target job responsibilities, qualifications, and tech requirements here..."
-            style={{ height: '310px' }}
+            placeholder="Paste the target job description here (responsibilities, required tech stack, qualifications)..."
+            rows={15}
+            id="workspace-jd-input"
           />
         </div>
       </div>
 
-      {/* Action Button */}
+      {/* Main Analysis CTA */}
       <div className="analyze-btn-container">
         <button
           type="button"
           className="analyze-main-btn"
           onClick={onAnalyze}
           disabled={loading || uploading || !resumeText.trim() || !jdText.trim()}
+          id="run-analysis-btn"
         >
           {loading ? (
             <>
-              <span className="spinner">⏳</span> Analyzing Embeddings & ATS...
+              <span className="spinner-sm" />
+              <span>Running Semantic Analysis & ATS Simulation...</span>
             </>
           ) : (
             <>
-              <span>⚡</span> Analyze Resume & Match Job
+              <span className="btn-icon">⚡</span>
+              <span>Evaluate Match & Uncover Gaps</span>
             </>
           )}
         </button>
+        <span className="analyze-hint">
+          {!resumeText.trim() || !jdText.trim()
+            ? 'Provide both resume and job description to enable analysis'
+            : 'Multi-layer TF-IDF, Semantic Cosine Vectors, and ATS rules ready'}
+        </span>
       </div>
     </div>
   );

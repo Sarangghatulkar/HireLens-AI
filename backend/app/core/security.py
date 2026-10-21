@@ -37,7 +37,12 @@ def mask_candidate_pii(text: str) -> str:
 
 
 def resolve_api_key(client_key: Optional[str] = None) -> str:
-    """Resolves API key, prioritizing client request over server environment."""
-    if client_key and client_key.strip():
-        return client_key.strip()
-    return settings.GEMINI_API_KEY
+    """Resolves API key, prioritizing client request over server environment.
+    
+    Filters out placeholder or dummy keys to prevent slow failing network calls.
+    """
+    key = client_key.strip() if client_key and client_key.strip() else settings.GEMINI_API_KEY.strip()
+    if not key or key.lower() in {"your_gemini_api_key_here", "none", "null", "undefined"} or key.startswith("AQ."):
+        return ""
+    return key
+

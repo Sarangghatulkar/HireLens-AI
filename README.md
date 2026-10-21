@@ -16,15 +16,25 @@ Built with a high-performance **FastAPI** backend and a modern **React 19 + Vite
 
 ## 🌟 Key Features
 
-1. **🎨 Clean, Enterprise SaaS Workspace**
+1. **🔐 User Authentication & Relational Database (Job-Ready Stack)**
+   - **JWT Bearer Authentication**: Secure token-based access with Bcrypt salted password hashing (12 rounds) and auto-session recovery.
+   - **PostgreSQL & SQLite Dual-Engine Support**: Enterprise PostgreSQL connection pooling with automatic, graceful fallback to local SQLite (`hirelens_dev.db`).
+   - **SQLAlchemy ORM Data Models**: Structured relational entities for `User` accounts and `ResumeScan` evaluation histories.
+
+2. **📈 Resume Progression & Scan History Dashboard**
+   - **Longitudinal Score Tracking**: Calculates score trajectory (`+X.X%` improvement) between candidate resume iterations.
+   - **Interactive Timeline**: Browse previous scans with candidate names, target job titles, ATS scores, and skill gap pills.
+   - **1-Click Workspace Restore**: Instantly re-load any past evaluation into the active workspace without re-uploading files.
+
+3. **🎨 Clean, Enterprise SaaS Workspace**
    - Drag & drop PDF/TXT resume parser with in-memory text normalization.
    - Word counters, formatting alerts, and candidate privacy mode with one-click **PII Masking** (redacting phone numbers and emails).
 
-2. **⚖️ Spotlight Diagnostics (What's Right vs. What's Wrong)**
+4. **⚖️ Spotlight Diagnostics (What's Right vs. What's Wrong)**
    - **✅ What's Right**: Verified strengths, matched skills, assertive power action verbs (*Architected, Spearheaded*), quantified metrics & KPIs (`35%`, `$150k`), and complete standard sections.
    - **❌ What's Wrong**: Specific red flags, critical missing skills, passive duty phrases (*Responsible for, Worked on*), formatting and density warnings.
 
-3. **💬 Real-Time AI Career Copilot ("Talk with AI")**
+5. **💬 Real-Time AI Career Copilot ("Talk with AI")**
    - Interactive, conversational AI assistant with **complete context** of the candidate's resume, target job description, matched/missing skills, and ATS audit.
    - Instant quick prompt pills:
      * 🎯 *"How do I fix missing skills?"*
@@ -33,24 +43,24 @@ Built with a high-performance **FastAPI** backend and a modern **React 19 + Vite
      * 🎤 *"Give me 3 technical interview questions for this role"*
    - Dual-engine: Works live with **Google Gemini API** when a key is provided, or uses the intelligent context-aware local NLP engine when offline.
 
-4. **💼 Smart Job Description & Skills Taxonomy**
+6. **💼 Smart Job Description & Skills Taxonomy**
    - Curated taxonomy of **250+ technical, cloud, AI/ML, data, web, and soft skills**.
    - Word-boundary aware extraction preventing false positives (e.g., handles `C`, `C++`, `C#`, `Go`, `R`, `CI/CD`, `.NET`).
    - Salient domain keyword extraction using TF-IDF n-grams (unigrams and bigrams).
 
-5. **📊 Explainable 4-Pillar Match Score (0–100%)**
+7. **📊 Explainable 4-Pillar Match Score (0–100%)**
    - **Skills Overlap (40%)**: Ratio of matched vs required job skills.
    - **Semantic Alignment (30%)**: Deep contextual vector similarity via `sentence-transformers` (`all-MiniLM-L6-v2`) with local cache priority and fallback.
    - **Keyword Match (15%)**: TF-IDF lexical cosine similarity.
    - **ATS & Structure (15%)**: Section completeness, contact info, power verbs, and quantified metrics.
 
-6. **📋 Rigorous ATS Compliance Audit**
+8. **📋 Rigorous ATS Compliance Audit**
    - **Essential Section Headers**: Verifies presence of Experience, Education, Skills, Summary, and Projects.
    - **Action Verbs Density**: Detects 90+ high-impact leadership verbs (*Architected, Spearheaded, Accelerated, Optimized*) vs passive duty phrasing (*Responsible for, Worked on*).
    - **Quantifiable Metrics Detection**: Identifies percentages, dollar values, multipliers, and scale indicators.
    - **Readability & Formatting**: Calculates Flesch Reading Ease score and word count range (optimal 350–900 words).
 
-7. **📥 Downloadable Executive PDF Reports**
+9. **📥 Downloadable Executive PDF Reports**
    - Generates professional, recruiter-ready PDF reports with ReportLab.
    - Includes score breakdown tables, skill gap matrices, ATS audit items, and prioritized action items.
 
@@ -62,11 +72,19 @@ Built with a high-performance **FastAPI** backend and a modern **React 19 + Vite
 d:/InsightAI/
 ├── backend/                       # Python FastAPI REST API Server
 │   ├── app/
-│   │   ├── main.py                # FastAPI application initialization & CORS
+│   │   ├── main.py                # FastAPI initialization, CORS & DB lifespan hook
 │   │   ├── core/                  # Configurations, settings, and security
-│   │   │   ├── config.py          # Environment settings (Pydantic / os.getenv)
+│   │   │   ├── config.py          # Environment settings (Postgres, SQLite, JWT)
+│   │   │   ├── auth.py            # Bcrypt hashing & PyJWT token utilities
 │   │   │   └── security.py        # Input sanitization and PII masking helpers
-│   │   ├── schemas/               # Pydantic request & response models
+│   │   ├── db/                    # Relational database layer (SQLAlchemy)
+│   │   │   └── session.py         # Resilient PostgreSQL pool + SQLite fallback
+│   │   ├── models/                # SQLAlchemy ORM database models
+│   │   │   ├── user.py            # User account entity (email, hashed_pw)
+│   │   │   └── scan.py            # ResumeScan history & progression entity
+│   │   ├── schemas/               # Pydantic v2 validation models
+│   │   │   ├── auth.py            # UserRegister, UserLogin, UserResponse
+│   │   │   ├── history.py         # ScanSummaryItem, HistoryProgressionResponse
 │   │   │   ├── analyze.py         # AnalyzeRequest schema
 │   │   │   ├── chat.py            # ChatMessage, ChatRequest schema
 │   │   │   └── report.py          # ReportRequest schema
@@ -82,12 +100,15 @@ d:/InsightAI/
 │   │       ├── router.py          # Central router aggregating sub-routers
 │   │       └── routes/
 │   │           ├── health.py      # GET /api/health
+│   │           ├── auth.py        # POST /api/auth/register, /login, GET /me
+│   │           ├── history.py     # GET /api/history/scans, /scans/{id}, DELETE
 │   │           ├── resume.py      # POST /api/upload-resume
-│   │           ├── analyze.py     # POST /api/analyze
+│   │           ├── analyze.py     # POST /api/analyze (persists authenticated scan)
 │   │           ├── chat.py        # POST /api/chat
 │   │           └── report.py      # POST /api/download-report
-│   ├── tests/                     # 28 passing pytest unit & integration tests
+│   ├── tests/                     # Passing pytest unit & integration test suite
 │   │   ├── conftest.py            # Clean test fixtures (independent of external files)
+│   │   ├── test_auth_and_history.py# User registration, JWT login, and history tests
 │   │   ├── test_api_endpoints.py  # TestClient REST route tests
 │   │   ├── test_ats_checker.py    # ATS audit tests
 │   │   ├── test_chat_assistant.py # AI Copilot tests
@@ -103,12 +124,14 @@ d:/InsightAI/
 ├── frontend/                      # Modern React 19 + Vite Single-Page Application
 │   ├── src/
 │   │   ├── main.jsx               # React DOM entrypoint
-│   │   ├── App.jsx                # Main application state & dashboard
-│   │   ├── index.css              # Custom design system & animations
+│   │   ├── App.jsx                # Main application state, auth & dashboard
+│   │   ├── index.css              # Custom design system, animations & modal styling
 │   │   ├── services/
-│   │   │   └── api.js             # Centralized REST API client
+│   │   │   └── api.js             # Centralized REST API client with JWT headers
 │   │   └── components/
-│   │       ├── Header.jsx         # Navigation, PII toggle & Gemini API Key modal
+│   │       ├── Header.jsx         # Navigation, User Avatar, History & Auth button
+│   │       ├── AuthModal.jsx      # Sign In, Register, Google OAuth & Password Recovery modal
+│   │       ├── HistoryModal.jsx   # Resume score progression & 1-click restore modal
 │   │       ├── Hero.jsx           # Clean hero section with "Start Here" CTA
 │   │       ├── Workspace.jsx      # Resume drag-and-drop & job description text input
 │   │       ├── ScoreOverview.jsx  # SVG gauge chart & 4-pillar breakdown
@@ -117,6 +140,8 @@ d:/InsightAI/
 │   │       ├── AtsAudit.jsx       # ATS compliance checklist & verb counter
 │   │       ├── StrengthsWeaknessesDetail.jsx # Deep dive & STAR bullet rewrites
 │   │       ├── AiChatCopilot.jsx  # Career Copilot chat interface
+│   │       ├── FloatingChatbot.jsx# Global floating assistant widget
+│   │       ├── MarkdownRenderer.jsx# Formatted markdown support in chat bubbles
 │   │       └── Inspector.jsx      # Raw text & PII masking preview
 │   ├── package.json               # Frontend dependencies & scripts
 │   ├── vite.config.js             # Vite config with /api proxy to port 8000

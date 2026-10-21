@@ -1,9 +1,22 @@
 """HireLens AI - FastAPI Application Entry Point."""
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.router import api_router
 from app.core.config import settings
+from app.db.session import init_db
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Initialize database tables on application startup
+    try:
+        init_db()
+    except Exception as e:
+        print(f"Database initialization notice: {e}")
+    yield
+
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -11,6 +24,7 @@ app = FastAPI(
     version=settings.VERSION,
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 # Configure CORS Middleware
